@@ -25,14 +25,14 @@ const LoadingSpinner: React.FC = () => (
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-msx-accent"></div>
 );
 
-const colorDistance = (c1: RGBColor, c2: RGBColor): number => {
+const colorDistance = (c1: { r: number, g: number, b: number }, c2: RGBColor): number => {
     const rDiff = c1.r - c2.r;
     const gDiff = c1.g - c2.g;
     const bDiff = c1.b - c2.b;
     return rDiff * rDiff + gDiff * gDiff + bDiff * bDiff;
 };
 
-const findClosestMsxColor = (color: RGBColor): RGBColor => {
+const findClosestMsxColor = (color: { r: number, g: number, b: number }): RGBColor => {
     let minDistance = Infinity;
     let closestColor = MSX_PALETTE[0];
 
@@ -245,7 +245,7 @@ export default function App() {
                                         key={index}
                                         className="w-full aspect-square rounded"
                                         style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
-                                        title={`RGB(${color.r}, ${color.g}, ${color.b})`}
+                                        title={`${color.name} - RGB(${color.r}, ${color.g}, ${color.b})`}
                                     ></div>
                                 ))}
                             </div>
