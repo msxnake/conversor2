@@ -1,0 +1,5 @@
+{
+  "name": "MSX Retro Sprite Converter",
+  "description": "An application to convert modern images into retro-style sprites for MSX computers. It resizes images to a small, precise bitmap (e.g., 64x64) and applies the authentic MSX color palette without any blurring.",
+  "requestFramePermissions": []
+}

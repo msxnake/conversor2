@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MSX Retro Sprite Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'msx-bg': '#1a202c',
+              'msx-panel': '#2d3748',
+              'msx-border': '#4a5568',
+              'msx-text': '#e2e8f0',
+              'msx-text-dim': '#a0aec0',
+              'msx-accent': '#65DBEF',
+              'msx-accent-hover': '#80e2f5',
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/"
+  }
+}
+</script>
+</head>
+  <body class="bg-msx-bg text-msx-text">
+    <div id="root"></div>
+  </body>
+</html>
