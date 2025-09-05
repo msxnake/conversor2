@@ -15,6 +15,12 @@ const ConvertIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+const DitherIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="currentColor" viewBox="0 0 16 16">
+      <path d="M0 0h8v8H0V0zm8 8h8v8H8V8z"/>
+    </svg>
+);
+
 const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -67,10 +73,11 @@ export default function App() {
     const [convertedImage, setConvertedImage] = useState<string | null>(null);
     const [targetWidth, setTargetWidth] = useState<number>(64);
     const [targetHeight, setTargetHeight] = useState<number>(64);
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [loadingState, setLoadingState] = useState<'idle' | 'msx' | 'dither'>('idle');
     const [error, setError] = useState<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const isLoading = loadingState !== 'idle';
 
     const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -88,7 +95,7 @@ export default function App() {
     const handleConvert = useCallback(async () => {
         if (!originalImage) return;
 
-        setIsLoading(true);
+        setLoadingState('msx');
         setError(null);
         setConvertedImage(null);
 
@@ -108,46 +115,125 @@ export default function App() {
                     throw new Error('Could not get canvas context');
                 }
                 
-                // CRITICAL: Disables blurring for a pixelated effect
                 ctx.imageSmoothingEnabled = false;
-
-                // 1. Resize the image with nearest-neighbor scaling
                 ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
 
-                // 2. Apply MSX color palette
                 const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
                 const data = imageData.data;
 
                 for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-                    
-                    const closestColor = findClosestMsxColor({ r, g, b });
-                    
-                    data[i] = closestColor.r;
-                    data[i + 1] = closestColor.g;
-                    data[i + 2] = closestColor.b;
-                    // Keep alpha at 255 (fully opaque)
-                    data[i+3] = 255;
+                    const a = data[i + 3]; // Get alpha channel
+
+                    if (a < 128) {
+                        // If pixel is mostly transparent, make it fully transparent.
+                        data[i] = 0;
+                        data[i + 1] = 0;
+                        data[i + 2] = 0;
+                        data[i + 3] = 0;
+                    } else {
+                        // If pixel is opaque, convert it to the nearest MSX color.
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        
+                        const closestColor = findClosestMsxColor({ r, g, b });
+                        
+                        data[i] = closestColor.r;
+                        data[i + 1] = closestColor.g;
+                        data[i + 2] = closestColor.b;
+                        data[i + 3] = 255; // Ensure it's fully opaque.
+                    }
                 }
                 
                 ctx.putImageData(imageData, 0, 0);
                 
                 setConvertedImage(canvas.toDataURL('image/png'));
-                setIsLoading(false);
+                setLoadingState('idle');
             };
 
             image.onerror = () => {
                 setError('Failed to load the image. Please try a different file.');
-                setIsLoading(false);
+                setLoadingState('idle');
             }
 
         } catch (err) {
             setError('An unexpected error occurred during conversion.');
-            setIsLoading(false);
+            setLoadingState('idle');
         }
 
+    }, [originalImage, targetWidth, targetHeight]);
+
+    const handleDitherConvert = useCallback(async () => {
+        if (!originalImage) return;
+
+        setLoadingState('dither');
+        setError(null);
+        setConvertedImage(null);
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        try {
+            const image = new Image();
+            image.src = originalImage;
+
+            image.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Could not get canvas context');
+
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+                const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+                const data = imageData.data;
+                const grayPixels = new Float32Array(targetWidth * targetHeight);
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    grayPixels[i / 4] = gray;
+                }
+
+                for (let y = 0; y < targetHeight; y++) {
+                    for (let x = 0; x < targetWidth; x++) {
+                        const index = y * targetWidth + x;
+                        const oldPixel = grayPixels[index];
+                        const newPixel = oldPixel > 127 ? 255 : 0;
+                        
+                        const dataIndex = index * 4;
+                        data[dataIndex] = data[dataIndex + 1] = data[dataIndex + 2] = newPixel;
+                        
+                        const quantError = oldPixel - newPixel;
+
+                        if (x + 1 < targetWidth) {
+                            grayPixels[index + 1] += quantError * 7 / 16;
+                        }
+                        if (y + 1 < targetHeight) {
+                            if (x > 0) {
+                                grayPixels[index + targetWidth - 1] += quantError * 3 / 16;
+                            }
+                            grayPixels[index + targetWidth] += quantError * 5 / 16;
+                            if (x + 1 < targetWidth) {
+                                grayPixels[index + targetWidth + 1] += quantError * 1 / 16;
+                            }
+                        }
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                setConvertedImage(canvas.toDataURL('image/png'));
+                setLoadingState('idle');
+            };
+
+            image.onerror = () => {
+                setError('Failed to load the image for dithering.');
+                setLoadingState('idle');
+            };
+        } catch (err) {
+            setError('An unexpected error occurred during dithering.');
+            setLoadingState('idle');
+        }
     }, [originalImage, targetWidth, targetHeight]);
 
     const handleDownload = () => {
@@ -225,14 +311,24 @@ export default function App() {
                         {/* 3. Convert */}
                         <div>
                             <h2 className="text-xl font-semibold mb-3 text-msx-accent">3. Process</h2>
-                            <button
-                                onClick={handleConvert}
-                                disabled={!originalImage || isLoading}
-                                className="w-full bg-msx-accent hover:bg-msx-accent-hover text-black font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed"
-                            >
-                                <ConvertIcon className="w-6 h-6 mr-2" />
-                                {isLoading ? 'Converting...' : 'Convert to MSX Sprite'}
-                            </button>
+                            <div className="space-y-3">
+                                <button
+                                    onClick={handleConvert}
+                                    disabled={!originalImage || isLoading}
+                                    className="w-full bg-msx-accent hover:bg-msx-accent-hover text-black font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                >
+                                    <ConvertIcon className="w-6 h-6 mr-2" />
+                                    {loadingState === 'msx' ? 'Converting...' : 'Convert to MSX Sprite'}
+                                </button>
+                                <button
+                                    onClick={handleDitherConvert}
+                                    disabled={!originalImage || isLoading}
+                                    className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                >
+                                    <DitherIcon className="w-6 h-6 mr-2" />
+                                    {loadingState === 'dither' ? 'Converting...' : 'Convert to B&W Dithered'}
+                                </button>
+                            </div>
                              {error && <p className="text-red-400 mt-2 text-sm">{error}</p>}
                         </div>
 
